@@ -1,0 +1,64 @@
+-- V1__create_auth_schema.sql
+-- Creates sequences and tables for auth: roles, users, refresh_tokens, audit_logs
+-- Designed for PostgreSQL
+
+-- 1) Sequences
+CREATE SEQUENCE IF NOT EXISTS users_id_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS roles_id_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS refresh_tokens_id_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS audit_logs_id_seq START 1;
+
+-- 2) roles table
+CREATE TABLE IF NOT EXISTS roles (
+  id BIGINT PRIMARY KEY DEFAULT nextval('roles_id_seq'),
+  name VARCHAR(50) NOT NULL UNIQUE
+);
+
+-- 3) users table
+CREATE TABLE IF NOT EXISTS users (
+  id BIGINT PRIMARY KEY DEFAULT nextval('users_id_seq'),
+  username VARCHAR(100) NOT NULL UNIQUE,
+  email VARCHAR(255) UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  phone VARCHAR(20),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  last_login_at TIMESTAMPTZ,
+  role_id BIGINT,
+  CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- 4) refresh_tokens table
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id BIGINT PRIMARY KEY DEFAULT nextval('refresh_tokens_id_seq'),
+  user_id BIGINT NOT NULL,
+  token_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked BOOLEAN NOT NULL DEFAULT false,
+  replaced_by BIGINT,
+  user_agent TEXT,
+  CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_refresh_replaced_by FOREIGN KEY (replaced_by) REFERENCES refresh_tokens(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokenhash ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_refresh_expires ON refresh_tokens(expires_at);
+
+-- 5) audit_logs table
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id BIGINT PRIMARY KEY DEFAULT nextval('audit_logs_id_seq'),
+  user_id BIGINT,
+  event_type VARCHAR(50) NOT NULL,
+  event_meta JSONB,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
